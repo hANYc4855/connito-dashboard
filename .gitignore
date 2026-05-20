@@ -1,0 +1,6 @@
+data/miner_history.json
+data/miner_history.json.tmp
+data/miner_history.lock
+.venv/
+__pycache__/
+*.pyc

@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connito Monitor</title>
+  <style>
+    :root {
+      --bg:       #f0f4f8;
+      --surface:  #ffffff;
+      --surface2: #f1f5f9;
+      --surface3: #e2e8f0;
+      --border:   #cbd5e1;
+      --text:     #0f172a;
+      --muted:    #94a3b8;
+      --muted2:   #64748b;
+      --accent:   #0284c7;
+      --green:    #16a34a;
+      --yellow:   #ca8a04;
+      --orange:   #ea580c;
+      --red:      #dc2626;
+      --purple:   #7c3aed;
+      --pink:     #db2777;
+      --cyan:     #0891b2;
+
+      --c-Distribute:       #0284c7;
+      --c-Train:            #16a34a;
+      --c-MinerCommit1:     #ea580c;
+      --c-MinerCommit2:     #c2410c;
+      --c-Submission:       #7c3aed;
+      --c-Validate:         #ca8a04;
+      --c-Merge:            #0891b2;
+      --c-ValidatorCommit1: #db2777;
+      --c-ValidatorCommit2: #be185d;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── header ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 200;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--green); box-shadow: 0 0 8px var(--green);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .logo h1 { font-size: 1rem; font-weight: 700; letter-spacing: .3px; }
+    .logo h1 span { color: var(--accent); }
+
+    .hdr-right { display: flex; align-items: center; gap: 16px; }
+    .hdr-badge {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 3px 12px; font-size: .72rem; color: var(--muted2);
+    }
+    .spin { display: inline-block; animation: rot 1.2s linear infinite; }
+    @keyframes rot { to { transform: rotate(360deg); } }
+    #ts { font-size: .72rem; color: var(--muted2); font-variant-numeric: tabular-nums; }
+
+    /* ── layout ── */
+    main { max-width: 1440px; margin: 0 auto; padding: 24px 20px 60px; }
+
+    .section-label {
+      font-size: .62rem; font-weight: 700; letter-spacing: 2.5px;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 12px; margin-top: 28px;
+    }
+    .section-label:first-child { margin-top: 0; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+    }
+
+    /* ── phase card ── */
+    .phase-name {
+      font-size: 2rem; font-weight: 800; letter-spacing: -.5px;
+      display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    }
+    .pdot {
+      width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0;
+      box-shadow: 0 0 10px currentColor;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+    /* phase flow (horizontal: phase1 --> phase2 --> …) */
+    .phase-flow {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: stretch;
+      gap: 0;
+      overflow-x: auto;
+      padding: 6px 2px 10px;
+      margin: 0 -4px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .phase-flow-step {
+      flex: 0 0 auto;
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 8px 11px;
+      border: 1px solid var(--border);
+      max-width: min(200px, 85vw);
+    }
+    .phase-flow-step.is-current {
+      background: var(--surface3);
+      border-color: rgba(74, 222, 128, .35);
+      box-shadow: 0 0 0 1px rgba(74, 222, 128, .12);
+    }
+    .phase-flow-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: .72rem;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    .phase-flow-blocks {
+      font-size: .62rem;
+      color: var(--muted2);
+      font-variant-numeric: tabular-nums;
+      margin-top: 5px;
+      line-height: 1.3;
+      word-break: break-all;
+    }
+    .phase-flow-arrow {
+      flex: 0 0 auto;
+      align-self: center;
+      color: var(--muted);
+      font-size: .72rem;
+      font-weight: 600;
+      padding: 0 6px;
+      letter-spacing: .5px;
+      user-select: none;
+      opacity: .85;
+    }
+    .upcoming-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .phase-subsection {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .phase-subsection-title {
+      font-size: .6rem; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+    }
+    .phase-mismatch {
+      font-size: .72rem; color: var(--yellow); margin-bottom: 14px;
+      padding: 8px 12px; border-radius: 8px;
+      background: rgba(202,138,4,.08); border: 1px solid rgba(202,138,4,.25);
+    }
+
+    /* ── progress bar ── */
+    .prog-wrap { margin-bottom: 14px; }
+    .prog-header { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted2); margin-bottom: 8px; }
+    .prog-bg { background: var(--surface3); border-radius: 99px; height: 7px; overflow: hidden; }
+    .prog-fill { height: 100%; border-radius: 99px; transition: width .6s ease; }
+    .prog-footer { display: flex; justify-content: space-between; font-size: .68rem; color: var(--muted); margin-top: 6px; }
+
+    .now-badge {
+      font-size: .55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+      padding: 2px 7px; border-radius: 20px;
+      background: rgba(22,163,74,.1); color: var(--green); border: 1px solid rgba(22,163,74,.3);
+    }
+
+    /* ── leaderboard ── */
+    .lb-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      flex-wrap: nowrap; margin-bottom: 14px;
+    }
+    .filter-tabs { display: flex; gap: 4px; flex-shrink: 0; }
+    .ftab {
+      padding: 5px 14px; border-radius: 20px; font-size: .72rem; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border);
+      background: transparent; color: var(--muted2);
+      transition: all .15s; white-space: nowrap;
+    }
+    .ftab.active {
+      background: rgba(2,132,199,.1); color: var(--accent);
+      border-color: rgba(2,132,199,.3);
+    }
+    .search-box {
+      flex: 1; min-width: 120px; max-width: 260px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 5px 11px; color: var(--text);
+      font-size: .76rem; outline: none;
+      transition: border-color .15s;
+    }
+    .search-box:focus { border-color: var(--accent); }
+    .search-box::placeholder { color: var(--muted); }
+
+    .lb-count { margin-left: auto; font-size: .72rem; color: var(--muted2); white-space: nowrap; }
+
+    .lb-table-wrap { overflow-x: auto; }
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: .76rem;
+    }
+    thead th {
+      padding: 9px 12px; text-align: left;
+      font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--muted); background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap; cursor: pointer; user-select: none;
+      transition: color .15s;
+    }
+    thead th:hover { color: var(--text); }
+    thead th.sorted-asc::after  { content: ' ↑'; color: var(--accent); }
+    thead th.sorted-desc::after { content: ' ↓'; color: var(--accent); }
+    thead th:first-child { width: 48px; text-align: center; }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .12s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    td { padding: 8px 12px; vertical-align: middle; white-space: nowrap; }
+    td:first-child { text-align: center; }
+
+    .rank { font-weight: 700; font-size: .8rem; color: var(--muted2); }
+    .rank.gold   { color: #fbbf24; }
+    .rank.silver { color: #94a3b8; }
+    .rank.bronze { color: #c2773e; }
+
+    .score-cell { display: flex; align-items: center; gap: 8px; }
+    .score-bar-bg { background: var(--surface3); border-radius: 99px; height: 4px; width: 60px; overflow: hidden; flex-shrink: 0; }
+    .score-bar-fill { height: 100%; border-radius: 99px; }
+    .score-num { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 72px; }
+
+    .loss-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .loss-good   { color: var(--green); }
+    .loss-ok     { color: var(--yellow); }
+    .loss-bad    { color: var(--orange); }
+    .loss-none   { color: var(--muted); }
+
+    .weight-val { font-variant-numeric: tabular-nums; color: var(--muted2); }
+
+    .badge-assigned {
+      font-size: .58rem; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+      padding: 2px 7px; border-radius: 20px;
+      background: rgba(22,163,74,.08); color: var(--green); border: 1px solid rgba(22,163,74,.25);
+    }
+
+    .hf-link {
+      color: var(--accent); text-decoration: none; font-family: 'Fira Mono','Courier New',monospace;
+      font-size: .72rem;
+    }
+    .hf-link:hover { text-decoration: underline; }
+    .hf-rev { color: var(--muted); font-size: .68rem; font-family: monospace; margin-left: 4px; }
+
+    .hotkey {
+      font-family: 'Fira Mono','Courier New',monospace; font-size: .68rem; color: var(--muted2);
+      cursor: pointer;
+    }
+    .hotkey:hover { color: var(--text); }
+
+    .eval-chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: flex-start; }
+    .eval-chip {
+      font-size: .6rem; padding: 1px 5px; border-radius: 4px;
+      background: rgba(2,132,199,.07); color: var(--accent); border: 1px solid rgba(2,132,199,.2);
+    }
+    .eval-vm-chip {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .eval-vm-vals {
+      display: flex; flex-direction: column; align-items: center; gap: 1px;
+      font-size: .58rem; font-variant-numeric: tabular-nums; line-height: 1.2;
+    }
+    .eval-vm-vl { color: var(--muted2); }
+    .eval-vm-sc { color: var(--green); font-weight: 600; }
+
+    /* per-miner aggregated loss cell */
+    .vl-agg {
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .vl-current { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .vl-minmax {
+      display: flex; gap: 5px;
+      font-size: .6rem; color: var(--muted2);
+      font-variant-numeric: tabular-nums;
+    }
+    .vl-mini-lbl { color: var(--muted); }
+
+    .show-more-row td {
+      text-align: center; padding: 12px;
+    }
+    .show-more-btn {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--muted2); border-radius: 8px; padding: 6px 20px;
+      font-size: .75rem; cursor: pointer; transition: all .15s;
+    }
+    .show-more-btn:hover { background: var(--surface3); color: var(--text); }
+
+    /* ── source label ── */
+    .src-label {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      font-size: .6rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 14px;
+      padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    }
+    .src-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .src-url { font-family: 'Fira Mono','Courier New',monospace; font-size: .65rem;
+               color: var(--muted2); font-weight: 400; text-transform: none; letter-spacing: 0; }
+    /* ── misc ── */
+    .loading { color: var(--muted2); font-size: .85rem; text-align: center; padding: 36px; }
+    .error-bar {
+      background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.2);
+      color: var(--red); border-radius: 8px; padding: 9px 14px;
+      font-size: .78rem; margin-bottom: 16px; display: none;
+    }
+
+    /* ── miner detail modal ── */
+    .miner-modal {
+      position: fixed; inset: 0; z-index: 500;
+      background: rgba(15,23,42,.5); backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .miner-modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: 100%; max-width: 660px;
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 24px 60px rgba(15,23,42,.15);
+    }
+    .miner-modal-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .miner-modal-title {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+      font-size: .9rem; font-weight: 700;
+    }
+    .miner-modal-close {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--muted2); border-radius: 6px;
+      width: 28px; height: 28px; cursor: pointer; font-size: .8rem;
+      flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+    }
+    .miner-modal-close:hover { background: var(--surface3); color: var(--text); }
+    .miner-modal-body { padding: 18px 20px 20px; }
+
+    .mm-stats-row {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 500px) { .mm-stats-row { grid-template-columns: repeat(2, 1fr); } }
+    .mm-stat {
+      background: var(--surface2); border-radius: 8px; padding: 8px 10px;
+    }
+    .mm-stat-lbl { font-size: .58rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted2); margin-bottom: 2px; }
+    .mm-stat-val { font-size: .92rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    .mm-chart-title {
+      font-size: .6rem; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+    }
+    .mm-chart-wrap {
+      background: var(--surface2); border-radius: 8px; padding: 12px 14px;
+      position: relative;
+    }
+    .mm-chart-tip {
+      position: absolute; pointer-events: none; z-index: 10;
+      background: var(--surface3); border: 1px solid var(--border);
+      border-radius: 7px; padding: 7px 11px;
+      font-size: .75rem; font-variant-numeric: tabular-nums;
+      color: var(--text); white-space: nowrap;
+      box-shadow: 0 6px 18px rgba(15,23,42,.12);
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    <h1>Connito <span>Monitor</span></h1>
+  </div>
+  <div class="hdr-right">
+    <span id="ts">—</span>
+    <div class="hdr-badge">
+      <span class="spin" id="spin" style="display:none">⟳</span>
+      <span>Live</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="err" class="error-bar"></div>
+
+  <!-- Current Phase -->
+  <p class="section-label">Current Phase</p>
+  <div class="card" id="phase-card"><div class="loading">Loading…</div></div>
+
+  <!-- Leaderboard (search input stays in DOM — never replaced on keystroke) -->
+  <p class="section-label">Miner Leaderboard</p>
+  <div class="card" id="lb-card">
+    <div class="lb-toolbar">
+      <div class="filter-tabs" id="lb-filter-tabs"></div>
+      <input type="search" class="search-box" id="lb-search-input"
+        placeholder="Search UID · hotkey · repo…" autocomplete="off" spellcheck="false" />
+      <span class="lb-count" id="lb-count">—</span>
+    </div>
+    <div class="lb-table-wrap" id="lb-table-wrap">
+      <div class="loading">Loading…</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── constants ────────────────────────────────────────────────────────────────
+const PHASE_ORDER = [
+  "Distribute","Train","MinerCommit1","MinerCommit2",
+  "Submission","Validate","Merge","ValidatorCommit1","ValidatorCommit2"
+];
+const PHASE_COLOR = {
+  Distribute:"var(--c-Distribute)", Train:"var(--c-Train)",
+  MinerCommit1:"var(--c-MinerCommit1)", MinerCommit2:"var(--c-MinerCommit2)",
+  Submission:"var(--c-Submission)", Validate:"var(--c-Validate)",
+  Merge:"var(--c-Merge)", ValidatorCommit1:"var(--c-ValidatorCommit1)",
+  ValidatorCommit2:"var(--c-ValidatorCommit2)"
+};
+function pc(name) { return PHASE_COLOR[name] || "var(--accent)"; }
+function fmt(n) { return n == null ? "—" : Number(n).toLocaleString(); }
+const METRIC_DP = 7;
+function fmtF(n, d=4) { return n == null ? "—" : Number(n).toFixed(d); }
+function fmtMetric(n) { return n == null ? "—" : Number(n).toFixed(METRIC_DP); }
+function fmtMetricRaw(n) { return n == null ? "" : Number(n).toFixed(METRIC_DP); }
+function trunc(s, n=12) { if (!s) return "—"; return s.length > n ? s.slice(0,6)+"…"+s.slice(-4) : s; }
+
+// ── leaderboard state ────────────────────────────────────────────────────────
+let lbData = [];
+let lbFilter = "all";
+let lbSort = { col: "score", dir: "desc" };
+let lbSearch = "";
+let lbShowCount = 50;
+
+// ── val_loss history (server JSON: 100 revisions × 100 samples each) ─────────
+let vlHistory = new Map(); // uid → Map<revision, [{v,s,t,rev}, ...]>
+
+function vlRevSeries(entry) {
+  return Array.isArray(entry) ? entry : (entry ? [entry] : []);
+}
+
+function vlRevLatest(entry) {
+  const s = vlRevSeries(entry);
+  return s.length ? s[s.length - 1] : null;
+}
+
+function vlFromServer(obj) {
+  const m = new Map();
+  if (!obj || typeof obj !== "object") return m;
+  for (const [uid, revObj] of Object.entries(obj)) {
+    const revMap = new Map();
+    for (const [rev, pt] of Object.entries(revObj)) revMap.set(rev, vlRevSeries(pt));
+    m.set(Number(uid), revMap);
+  }
+  return m;
+}
+
+// One point per revision (latest sample) for the revision chart
+function vlRevPoints(uid) {
+  const revMap = vlHistory.get(uid);
+  if (!revMap) return [];
+  const pts = [];
+  for (const entry of revMap.values()) {
+    const latest = vlRevLatest(entry);
+    if (latest) pts.push(latest);
+  }
+  return pts.sort((a, b) => a.t - b.t);
+}
+
+function vlAllSamples(uid) {
+  const revMap = vlHistory.get(uid);
+  if (!revMap) return [];
+  const pts = [];
+  for (const entry of revMap.values()) pts.push(...vlRevSeries(entry));
+  return pts.sort((a, b) => a.t - b.t);
+}
+
+function vlAgg(uid) {
+  const pts = vlAllSamples(uid);
+  if (pts.length === 0) return null;
+  let min = Infinity, max = -Infinity, sum = 0;
+  for (const p of pts) { if (p.v < min) min = p.v; if (p.v > max) max = p.v; sum += p.v; }
+  return { min, max, avg: sum / pts.length, count: pts.length };
+}
+
+// ── per-miner val_loss line chart ─────────────────────────────────────────────
+function buildMinerLineChart(uid) {
+  const pts = vlRevPoints(uid);
+
+  if (pts.length === 0) {
+    return `<div style="color:var(--muted2);font-size:.8rem;text-align:center;padding:28px 0">No data yet.</div>`;
+  }
+  if (pts.length === 1) {
+    const p = pts[0];
+    const revLabel = p.rev ? p.rev.slice(0, 7) : "—";
+    return `<div style="color:var(--muted2);font-size:.78rem;text-align:center;padding:20px 0">
+      Only 1 revision seen (<code style="color:var(--accent)">${revLabel}</code>).<br>
+      Chart will expand when a new model revision is submitted.
+    </div>`;
+  }
+
+  const n      = pts.length;
+  const vlVals = pts.map(p => p.v);
+  const scVals = pts.map(p => p.s).filter(s => s != null);
+  const hasScore = scVals.length > 0;
+
+  const minVL  = Math.min(...vlVals), maxVL = Math.max(...vlVals);
+  const rangeVL = maxVL - minVL || 0.0001;
+  const avgVL  = vlVals.reduce((a, b) => a + b, 0) / vlVals.length;
+
+  const minSC = hasScore ? Math.min(...scVals) : 0;
+  const maxSC = hasScore ? Math.max(...scVals) : 1;
+  const rangeSC = maxSC - minSC || 0.0001;
+
+  const W = 560, H = 190;
+  const PL = 58, PR = 58, PT = 22, PB = 38;
+  const cW = W - PL - PR, cH = H - PT - PB;
+
+  // evenly spaced x positions by revision index
+  const xS   = i => PL + (n === 1 ? cW / 2 : (i / (n - 1)) * cW);
+  const ySvl = v => PT + cH - ((v - minVL) / rangeVL) * cH;
+  const ySsc = s => PT + cH - ((s - minSC) / rangeSC) * cH;
+
+  // horizontal grid + dual y-axis labels (4 ticks)
+  const grid = [0, 0.33, 0.67, 1].map(frac => {
+    const vl = minVL + frac * rangeVL;
+    const sc = minSC + frac * rangeSC;
+    const y  = ySvl(vl).toFixed(1);
+    return `
+      <line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="#cbd5e1" stroke-width="0.5"/>
+      <text x="${PL - 5}" y="${+y + 3}" text-anchor="end"   fill="#0284c7" font-size="9" opacity=".8">${fmtMetricRaw(vl)}</text>
+      ${hasScore ? `<text x="${W - PR + 5}" y="${+y + 3}" text-anchor="start" fill="#16a34a" font-size="9" opacity=".8">${fmtMetricRaw(sc)}</text>` : ""}`;
+  });
+
+  // x-axis: revision labels (rotated, truncated to 7 chars)
+  const xLabels = pts.map((p, i) => {
+    const label = p.rev ? p.rev.slice(0, 7) : `#${i + 1}`;
+    const x = xS(i).toFixed(1);
+    return `<text x="${x}" y="${H - 6}" text-anchor="middle"
+      transform="rotate(-35, ${x}, ${H - 6})"
+      fill="#94a3b8" font-size="8.5">${label}</text>`;
+  });
+
+  // val_loss polyline + area fill
+  const vlCoords  = pts.map((p, i) => `${xS(i).toFixed(1)},${ySvl(p.v).toFixed(1)}`);
+  const vlFillPts = [...vlCoords,
+    `${xS(n - 1).toFixed(1)},${(PT + cH).toFixed(1)}`,
+    `${xS(0).toFixed(1)},${(PT + cH).toFixed(1)}`].join(" ");
+  const avgVLY  = ySvl(avgVL).toFixed(1);
+
+  // score polyline
+  let scoreLayer = "";
+  if (hasScore) {
+    const scCoords = pts.map((p, i) =>
+      p.s != null ? `${xS(i).toFixed(1)},${ySsc(p.s).toFixed(1)}` : null
+    ).filter(Boolean);
+    const avgSC  = scVals.reduce((a, b) => a + b, 0) / scVals.length;
+    const avgSCY = ySsc(avgSC).toFixed(1);
+    scoreLayer = `
+      <line x1="${PL}" y1="${avgSCY}" x2="${W-PR}" y2="${avgSCY}" stroke="#16a34a" stroke-width="1" stroke-dasharray="4,3" opacity=".4"/>
+      <polyline points="${scCoords.join(" ")}" fill="none" stroke="#16a34a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map((p, i) => p.s != null ? `<circle cx="${xS(i).toFixed(1)}" cy="${ySsc(p.s).toFixed(1)}" r="3" fill="#16a34a" opacity=".85"><title>score ${fmtMetricRaw(p.s)}\nrev ${p.rev || "—"}</title></circle>` : "").join("")}
+      <circle cx="${xS(pts.map((p,i)=>p.s!=null?i:-1).filter(i=>i>=0).pop()||0).toFixed(1)}" cy="${ySsc(scVals[scVals.length-1]).toFixed(1)}" r="4.5" fill="#16a34a"/>`;
+  }
+
+  // vertical markers at each revision
+  const vMarkers = pts.map((_, i) =>
+    `<line x1="${xS(i).toFixed(1)}" y1="${PT}" x2="${xS(i).toFixed(1)}" y2="${PT + cH}" stroke="#cbd5e1" stroke-width="0.5" stroke-dasharray="2,4"/>`
+  );
+
+  // value labels at each data point
+  const valueLabels = pts.map((p, i) => {
+    const cx  = xS(i);
+    const vlY = ySvl(p.v);
+    const scY = p.s != null ? ySsc(p.s) : null;
+    // place label above dot; if score dot is close, nudge to avoid overlap
+    const vlLabelY = vlY - 10;
+    const scLabelY = scY != null ? (Math.abs(scY - vlY) < 18 ? scY + 14 : scY - 10) : null;
+    return `
+      <text x="${cx.toFixed(1)}" y="${vlLabelY.toFixed(1)}" text-anchor="middle" fill="#0284c7" font-size="8.5" font-weight="600">${fmtMetricRaw(p.v)}</text>
+      ${scY != null ? `<text x="${cx.toFixed(1)}" y="${scLabelY.toFixed(1)}" text-anchor="middle" fill="#16a34a" font-size="8.5" font-weight="600">${fmtMetricRaw(p.s)}</text>` : ""}`;
+  });
+
+  // invisible hover zones (one per revision) for combined tooltip
+  const slotW = n > 1 ? cW / (n - 1) : cW;
+  const hoverZones = pts.map((p, i) => {
+    const cx     = xS(i);
+    const zoneX  = (cx - slotW / 2).toFixed(1);
+    const zoneW  = slotW.toFixed(1);
+    const scVal  = fmtMetricRaw(p.s);
+    const revStr = p.rev ? p.rev.slice(0, 7) : `#${i+1}`;
+    return `<rect x="${zoneX}" y="${PT}" width="${zoneW}" height="${cH}" fill="transparent"
+      class="vl-hz" data-rev="${revStr}" data-vl="${fmtMetricRaw(p.v)}" data-sc="${scVal}"/>`;
+  });
+
+  // axis labels
+  const axisLabels = `
+    <text x="${PL - 5}" y="${PT - 8}" text-anchor="end"   fill="#0284c7" font-size="9" font-weight="700">val_loss</text>
+    ${hasScore ? `<text x="${W - PR + 5}" y="${PT - 8}" text-anchor="start" fill="#16a34a" font-size="9" font-weight="700">score</text>` : ""}`;
+
+  return `
+    <svg class="mm-chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;overflow:visible">
+      <defs>
+        <linearGradient id="mlg${uid}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#0284c7" stop-opacity=".12"/>
+          <stop offset="100%" stop-color="#0284c7" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      ${axisLabels}
+      ${grid.join("")}
+      ${vMarkers.join("")}
+      <line x1="${PL}" y1="${avgVLY}" x2="${W-PR}" y2="${avgVLY}" stroke="#ca8a04" stroke-width="1" stroke-dasharray="4,3" opacity=".4"/>
+      <polygon points="${vlFillPts}" fill="url(#mlg${uid})"/>
+      <polyline points="${vlCoords.join(" ")}" fill="none" stroke="#0284c7" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map((p, i) => `<circle cx="${xS(i).toFixed(1)}" cy="${ySvl(p.v).toFixed(1)}" r="3.5" fill="#0284c7" opacity=".9"/>`).join("")}
+      <circle cx="${xS(n-1).toFixed(1)}" cy="${ySvl(vlVals[n-1]).toFixed(1)}" r="5" fill="#0284c7"/>
+      ${scoreLayer}
+      ${valueLabels.join("")}
+      ${hoverZones.join("")}
+      ${xLabels.join("")}
+    </svg>
+    <div id="mm-tip-${uid}" class="mm-chart-tip" style="display:none"></div>`;
+}
+
+function openMinerModal(uid) {
+  const r = lbData.find(x => x.uid === uid);
+  if (!r) return;
+
+  const agg  = vlAgg(uid);
+  const hk   = r.hotkey || "";
+  const repo = r.hf_repo_id || "";
+  const scoreC = r.score >= 0.5 ? "var(--green)" : r.score >= 0.2 ? "var(--yellow)" : "var(--orange)";
+
+  const statChips = [
+    ["Score",   fmtMetric(r.score),        scoreC],
+    ["Val Loss",r.val_loss != null ? fmtMetric(r.val_loss) : "—", r.val_loss != null ? (r.val_loss < 8 ? "var(--green)" : r.val_loss < 10 ? "var(--yellow)" : "var(--orange)") : "var(--muted)"],
+    ["Min",     agg ? fmtMetric(agg.min) : "—", "var(--green)"],
+    ["Avg",     agg ? fmtMetric(agg.avg) : "—", "var(--yellow)"],
+    ["Max",     agg ? fmtMetric(agg.max) : "—", "var(--red)"],
+    ["Samples", agg ? agg.count : "—",    "var(--accent)"],
+    ["Weight",  r.weight_submitted != null ? fmtF(r.weight_submitted, 4) : "—", "var(--muted2)"],
+    ["Evals",   r.evaluation_count ?? "—", "var(--muted2)"],
+  ].map(([lbl, val, color]) => `
+    <div class="mm-stat">
+      <span class="mm-stat-lbl">${lbl}</span>
+      <span class="mm-stat-val" style="color:${color}">${val}</span>
+    </div>`).join("");
+
+  const repoLine = repo
+    ? `<a class="hf-link" href="https://huggingface.co/${repo}" target="_blank" rel="noopener">${repo}</a>${r.hf_revision ? `<span class="hf-rev">${r.hf_revision.slice(0,7)}</span>` : ""}`
+    : "";
+
+  document.getElementById("miner-modal-title").innerHTML = `
+    <span style="font-size:1.1rem;font-weight:800">UID ${uid}</span>
+    ${r.in_assignment ? '<span class="badge-assigned" style="margin-left:8px">Active</span>' : ""}
+    ${hk ? `<span class="hotkey" style="margin-left:10px;font-size:.72rem" title="${hk}">${hk.slice(0,6)}…${hk.slice(-4)}</span>` : ""}
+    ${repoLine ? `<span style="margin-left:10px">${repoLine}</span>` : ""}`;
+
+  document.getElementById("miner-modal-body").innerHTML = `
+    <div class="mm-stats-row">${statChips}</div>
+    <div class="mm-chart-title">Val Loss &amp; Score by revision</div>
+    <div class="mm-chart-wrap" id="mm-chart-wrap-${uid}">${buildMinerLineChart(uid)}</div>`;
+
+  // wire hover tooltip on revision zones
+  const chartWrap = document.getElementById(`mm-chart-wrap-${uid}`);
+  const tip       = document.getElementById(`mm-tip-${uid}`);
+  if (chartWrap && tip) {
+    chartWrap.addEventListener("mousemove", e => {
+      const hz = e.target.closest(".vl-hz");
+      if (!hz) { tip.style.display = "none"; return; }
+      const base = chartWrap.getBoundingClientRect();
+      tip.style.display = "block";
+      const left = e.clientX - base.left + 14;
+      tip.style.left = (left + 140 > base.width ? left - 155 : left) + "px";
+      tip.style.top  = (e.clientY - base.top - 54) + "px";
+      const sc = hz.dataset.sc;
+      tip.innerHTML =
+        `<div style="color:var(--muted2);font-size:.62rem;margin-bottom:4px;font-family:monospace">${hz.dataset.rev}</div>` +
+        `<div style="color:#0284c7">val_loss &nbsp;<strong>${hz.dataset.vl}</strong></div>` +
+        (sc ? `<div style="color:#16a34a;margin-top:2px">score &nbsp;&nbsp;&nbsp;&nbsp;<strong>${sc}</strong></div>` : "");
+    });
+    chartWrap.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  }
+
+  document.getElementById("miner-modal").style.display = "flex";
+  document.body.style.overflow = "hidden";
+}
+
+function closeMinerModal() {
+  document.getElementById("miner-modal").style.display = "none";
+  document.body.style.overflow = "";
+}
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeMinerModal(); });
+
+// ── shared phase helpers ───────────────────────────────────────────────────────
+function progBar(pct, color) {
+  return `
+    <div class="prog-wrap">
+      <div class="prog-header">
+        <span style="color:${color};font-weight:700">Phase progress</span>
+        <span>${pct}%</span>
+      </div>
+      <div class="prog-bg"><div class="prog-fill" style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+}
+
+/** All phases with start–end block numbers (from cycle API `blocks_until_next_phase`). */
+function buildPhaseBlocksListHTML(currentName, blocksUntil) {
+  if (!blocksUntil) return "";
+  const steps = [];
+  for (let i = 0; i < PHASE_ORDER.length; i++) {
+    const name = PHASE_ORDER[i];
+    const d = blocksUntil[name];
+    if (!d) continue;
+    const [start, end] = d;
+    const isCur = name === currentName;
+    const color = pc(name);
+    const arrow = steps.length ? '<span class="phase-flow-arrow" aria-hidden="true">--></span>' : "";
+    steps.push(`${arrow}<div class="phase-flow-step${isCur ? " is-current" : ""}">
+        <div class="phase-flow-head">
+          <span class="upcoming-dot" style="background:${color}"></span>
+          <span style="color:${color}">${name}</span>
+          ${isCur ? '<span class="now-badge">NOW</span>' : ""}
+        </div>
+        <div class="phase-flow-blocks">${fmt(start)} – ${fmt(end)}</div>
+      </div>`);
+  }
+  return `
+    <div class="phase-subsection">
+      <div class="phase-subsection-title">All phases</div>
+      <div class="phase-flow">${steps.join("")}</div>
+    </div>`;
+}
+
+// Dashboard phase snapshot (cached so mismatch banner survives cycle-only ticks)
+let lastLbPhase = null;
+
+// ── Current Phase card (cycle API) ─────────────────────────────────────────────
+function renderPhaseCard(cp, lp, blocksUntil) {
+  if (lp) lastLbPhase = lp;
+  const dash = lastLbPhase;
+
+  const color = pc(cp.phase_name);
+  const total = (cp.phase_end_block - cp.phase_start_block) || 1;
+  const pct   = Math.round((cp.blocks_into_phase / total) * 100);
+
+  const mismatch = dash && (
+    dash.name !== cp.phase_name ||
+    Number(dash.head_block) !== Number(cp.block)
+  );
+
+  document.getElementById("phase-card").innerHTML = `
+    <div class="src-label">
+      <span class="src-dot" style="background:var(--accent)"></span>
+      Cycle API
+    </div>
+    <div class="phase-name">
+      <span class="pdot" style="color:${color};background:${color}"></span>
+      ${cp.phase_name}
+    </div>
+    ${progBar(pct, color)}
+    <div class="prog-footer" style="margin-top:-8px;margin-bottom:12px">
+      <span>${fmt(cp.blocks_into_phase)} blocks in</span>
+      <span>${fmt(cp.blocks_remaining_in_phase)} remaining</span>
+    </div>
+    ${buildPhaseBlocksListHTML(cp.phase_name, blocksUntil)}
+  `;
+}
+
+// ── render leaderboard ────────────────────────────────────────────────────────
+function scoreColor(s) {
+  if (s >= 0.5) return "var(--green)";
+  if (s >= 0.2) return "var(--yellow)";
+  return "var(--orange)";
+}
+function lossClass(v) {
+  if (v == null) return "loss-none";
+  if (v < 8)  return "loss-good";
+  if (v < 10) return "loss-ok";
+  return "loss-bad";
+}
+
+function getFilteredSorted() {
+  let rows = [...lbData];
+
+  // filter
+  if (lbFilter === "scored")   rows = rows.filter(r => r.val_loss != null && r.val_loss > 0);
+  if (lbFilter === "assigned") rows = rows.filter(r => r.in_assignment);
+
+  // search
+  if (lbSearch) {
+    const q = lbSearch.toLowerCase();
+    rows = rows.filter(r =>
+      String(r.uid).includes(q) ||
+      (r.hotkey || "").toLowerCase().includes(q) ||
+      (r.hf_repo_id || "").toLowerCase().includes(q)
+    );
+  }
+
+  // sort
+  rows.sort((a, b) => {
+    let av = a[lbSort.col], bv = b[lbSort.col];
+    if (av == null) av = lbSort.dir === "asc" ? Infinity : -Infinity;
+    if (bv == null) bv = lbSort.dir === "asc" ? Infinity : -Infinity;
+    return lbSort.dir === "asc" ? av - bv : bv - av;
+  });
+
+  return rows;
+}
+
+/** @param {boolean} tableOnly if true, skip re-rendering filter tabs (search typing). */
+function renderLeaderboard(tableOnly) {
+  const filtered = getFilteredSorted();
+  const visible  = filtered.slice(0, lbShowCount);
+
+  const colDefs = [
+    { key: "#",              label: "#",           sortable: false },
+    { key: "uid",            label: "UID",         sortable: true  },
+    { key: "score",          label: "Score",       sortable: true  },
+    { key: "val_loss",       label: "Val Loss",    sortable: true  },
+    { key: "weight_submitted", label: "Weight",    sortable: true  },
+    { key: "evaluation_count", label: "Evals",     sortable: true  },
+    { key: "in_assignment",  label: "Assigned",    sortable: true  },
+    { key: "hf_repo_id",     label: "HF Repo",     sortable: false },
+    { key: "hotkey",         label: "Hotkey",      sortable: false },
+  ];
+
+  const ths = colDefs.map(c => {
+    if (!c.sortable) return `<th>${c.label}</th>`;
+    const cls = lbSort.col === c.key
+      ? (lbSort.dir === "asc" ? "sorted-asc" : "sorted-desc") : "";
+    return `<th class="${cls}" onclick="setSort('${c.key}')">${c.label}</th>`;
+  }).join("");
+
+  const trs = visible.map((r, i) => {
+    const rank   = filtered.indexOf(r) + 1;
+    const rankCls = rank === 1 ? "gold" : rank === 2 ? "silver" : rank === 3 ? "bronze" : "";
+    const scorePct = Math.round((r.score || 0) * 100);
+    const scoreC   = scoreColor(r.score || 0);
+    const repo     = r.hf_repo_id || "";
+    const rev      = r.hf_revision ? `<span class="hf-rev">${r.hf_revision.slice(0,7)}</span>` : "";
+    const repoLink = repo
+      ? `<a class="hf-link" href="https://huggingface.co/${repo}" target="_blank" rel="noopener">${repo}</a>${rev}`
+      : `<span style="color:var(--muted)">—</span>`;
+    const hk = r.hotkey || "";
+    const hkDisplay = hk ? `${hk.slice(0,6)}…${hk.slice(-4)}` : "—";
+    const evalLabels = (r.validator_metrics || r.evaluated_by_validator_labels || []).map(vm => {
+      const label = typeof vm === "string" ? vm : vm.validator_label;
+      const vl    = typeof vm === "object" && vm.val_loss != null ? fmtMetric(vm.val_loss) : null;
+      const sc    = typeof vm === "object" && vm.score    != null ? fmtMetric(vm.score)    : null;
+      if (vl == null && sc == null) return `<span class="eval-chip">${label}</span>`;
+      return `<div class="eval-vm-chip">
+        <span class="eval-chip">${label}</span>
+        <div class="eval-vm-vals">
+          <span class="eval-vm-vl">${vl ?? "—"}</span>
+          <span class="eval-vm-sc">${sc ?? "—"}</span>
+        </div>
+      </div>`;
+    }).join("");
+
+    // val_loss cell: current value + aggregated min/avg/max from history
+    const agg = vlAgg(r.uid);
+    let vlCell;
+    if (r.val_loss == null) {
+      vlCell = `<span class="loss-val loss-none">—</span>`;
+    } else if (agg && agg.count > 1) {
+      vlCell = `
+        <div class="vl-agg">
+          <span class="vl-current loss-val ${lossClass(r.val_loss)}">${fmtMetric(r.val_loss)}</span>
+          <div class="vl-minmax">
+            <span><span class="vl-mini-lbl">mn</span> ${fmtMetric(agg.min)}</span>
+            <span><span class="vl-mini-lbl">avg</span> ${fmtMetric(agg.avg)}</span>
+            <span><span class="vl-mini-lbl">mx</span> ${fmtMetric(agg.max)}</span>
+          </div>
+        </div>`;
+    } else {
+      vlCell = `<span class="loss-val ${lossClass(r.val_loss)}">${fmtMetric(r.val_loss)}</span>`;
+    }
+
+    return `<tr style="cursor:pointer" onclick="openMinerModal(${r.uid})">
+      <td><span class="rank ${rankCls}">${rank}</span></td>
+      <td style="font-weight:600">${r.uid}</td>
+      <td>
+        <div class="score-cell">
+          <div class="score-bar-bg"><div class="score-bar-fill" style="width:${scorePct}%;background:${scoreC}"></div></div>
+          <span class="score-num" style="color:${scoreC}">${fmtMetric(r.score)}</span>
+        </div>
+      </td>
+      <td>${vlCell}</td>
+      <td><span class="weight-val">${r.weight_submitted != null ? fmtF(r.weight_submitted,4) : "—"}</span></td>
+      <td><div class="eval-chips">${evalLabels || '<span style="color:var(--muted)">—</span>'}</div></td>
+      <td>${r.in_assignment ? '<span class="badge-assigned">Active</span>' : '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${repoLink}</td>
+      <td><span class="hotkey" title="${hk}" onclick="navigator.clipboard?.writeText('${hk}')">${hkDisplay}</span></td>
+    </tr>`;
+  }).join("");
+
+  const showMoreRow = filtered.length > lbShowCount
+    ? `<tr class="show-more-row"><td colspan="${colDefs.length}"><button class="show-more-btn" onclick="showMore()">Show more (${filtered.length - lbShowCount} remaining)</button></td></tr>`
+    : "";
+
+  const tableHTML = `
+      <table>
+        <thead><tr>${ths}</tr></thead>
+        <tbody>${trs}${showMoreRow}</tbody>
+      </table>`;
+
+  if (!tableOnly) {
+    document.getElementById("lb-filter-tabs").innerHTML = `
+        <button class="ftab ${lbFilter==="all"?"active":""}"      onclick="setFilter('all')">All <span style="opacity:.6">${lbData.length}</span></button>
+        <button class="ftab ${lbFilter==="scored"?"active":""}"   onclick="setFilter('scored')">Scored</button>
+        <button class="ftab ${lbFilter==="assigned"?"active":""}" onclick="setFilter('assigned')">Assigned</button>`;
+    const inp = document.getElementById("lb-search-input");
+    if (inp && inp.value !== lbSearch) inp.value = lbSearch;
+  }
+
+  document.getElementById("lb-count").textContent = `${filtered.length} miners`;
+  document.getElementById("lb-table-wrap").innerHTML = tableHTML;
+}
+
+function setFilter(f) { lbFilter = f; lbShowCount = 50; renderLeaderboard(false); }
+function setSort(col) {
+  if (lbSort.col === col) lbSort.dir = lbSort.dir === "asc" ? "desc" : "asc";
+  else { lbSort = { col, dir: col === "val_loss" ? "asc" : "desc" }; }
+  renderLeaderboard(false);
+}
+function showMore() { lbShowCount += 50; renderLeaderboard(true); }
+
+// ── fetch & refresh ──────────────────────────────────────────────────────────
+async function refresh() {
+  document.getElementById("spin").style.display = "inline-block";
+  try {
+    const [all, lb] = await Promise.all([
+      fetch("/api/all").then(r => r.json()),
+      fetch("/api/leaderboard").then(r => r.json()),
+    ]);
+
+    document.getElementById("err").style.display = "none";
+
+    // Current Phase
+    if (all.get_phase) {
+      renderPhaseCard(all.get_phase, lb.data.phase, all.blocks_until_next_phase);
+    }
+
+    // Leaderboard (history persisted server-side in data/miner_history.json)
+    lbData = lb.data.leaderboard || [];
+    if (lb.miner_history) vlHistory = vlFromServer(lb.miner_history);
+    renderLeaderboard();
+
+    document.getElementById("ts").textContent =
+      new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+
+  } catch (e) {
+    const el = document.getElementById("err");
+    el.style.display = "block";
+    el.textContent = "Failed to fetch: " + e.message;
+  } finally {
+    document.getElementById("spin").style.display = "none";
+  }
+}
+// Normalize cycle API phase (different field names) → leaderboard API shape
+function normalizeCyclePhase(cp, prevUpcoming) {
+  return {
+    name:             cp.phase_name,
+    index:            cp.phase_index,
+    started_at_block: cp.phase_start_block,
+    ends_at_block:    cp.phase_end_block,
+    blocks_remaining: cp.blocks_remaining_in_phase,
+    head_block:       cp.block,
+    cycle_index:      cp.cycle_index,
+    cycle_length:     cp.cycle_length,
+    upcoming:         prevUpcoming || [],
+  };
+}
+
+// cycle data refreshes every 6s, leaderboard every 18s
+let lbAge = 0;
+async function tick() {
+  lbAge++;
+  if (lbAge >= 3) { lbAge = 0; await refresh(); }
+  else {
+    document.getElementById("spin").style.display = "inline-block";
+    try {
+      const all = await fetch("/api/all").then(r => r.json());
+      if (all.get_phase) {
+        renderPhaseCard(all.get_phase, null, all.blocks_until_next_phase);
+      }
+      document.getElementById("ts").textContent =
+        new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+    } catch {}
+    document.getElementById("spin").style.display = "none";
+  }
+}
+
+document.getElementById("lb-search-input").addEventListener("input", function () {
+  lbSearch = this.value;
+  lbShowCount = 50;
+  renderLeaderboard(true);
+});
+
+refresh();
+setInterval(tick, 6000);
+</script>
+<!-- Miner detail modal -->
+<div id="miner-modal" class="miner-modal" onclick="if(event.target===this)closeMinerModal()" style="display:none">
+  <div class="miner-modal-box">
+    <div class="miner-modal-header">
+      <div id="miner-modal-title" class="miner-modal-title"></div>
+      <button class="miner-modal-close" onclick="closeMinerModal()">✕</button>
+    </div>
+    <div id="miner-modal-body" class="miner-modal-body"></div>
+  </div>
+</div>
+
+</body>
+</html>
