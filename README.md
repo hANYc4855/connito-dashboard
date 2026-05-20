@@ -42,5 +42,5 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4 --loop uvloop
 - **Previous phase blocks** reference grid
 - **Validator whitelist** — all 7 whitelisted validator SS58 addresses
 - **Init Peer IDs** — parsed multiaddr display
-- Auto-refreshes every **6 seconds** (one Bittensor block ≈ 6 s)
-- **Miner val_loss / score history** — up to **100 revisions per miner**, each revision keeps up to **100 samples** when val_loss or score changes, in `data/miner_history.json`
+- Auto-refreshes every **12 seconds** (phase + leaderboard)
+- **Miner val_loss / score history** — stored in `data/miner_history.json` as `uid` → `repo_id` → `revision` → samples (up to 100 revisions × 100 samples per repo). Old repos are kept on disk; the UI shows only the miner’s current `hf_repo_id`.

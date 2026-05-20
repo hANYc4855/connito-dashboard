@@ -160,9 +160,9 @@
     }
     .upcoming-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
     .phase-subsection {
-      margin-top: 18px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border);
+      margin-top: 0;
+      padding-top: 0;
+      border-top: none;
     }
     .phase-subsection-title {
       font-size: .6rem; font-weight: 700; letter-spacing: 1.5px;
@@ -181,6 +181,33 @@
     .prog-fill { height: 100%; border-radius: 99px; transition: width .6s ease; }
     .prog-footer { display: flex; justify-content: space-between; font-size: .68rem; color: var(--muted); margin-top: 6px; }
 
+    /* compact phase progress (leaderboard toolbar) */
+    .lb-phase-mini {
+      display: flex; align-items: center; gap: 10px; flex: 1;
+      min-width: 240px; max-width: 720px; margin-left: auto;
+      padding: 6px 14px; border-radius: 20px;
+      background: var(--surface2); border: 1px solid var(--border);
+      font-size: .62rem; color: var(--muted2); white-space: nowrap;
+    }
+    .lb-phase-mini .pdot {
+      width: 8px; height: 8px; margin: 0; flex-shrink: 0;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+    .lb-phase-mini-name {
+      font-size: .72rem; font-weight: 700; color: var(--text);
+      flex-shrink: 0;
+    }
+    .lb-phase-mini-prog {
+      display: flex; align-items: center; gap: 8px;
+      flex: 1; min-width: 120px;
+    }
+    .lb-phase-mini-prog .prog-bg { height: 5px; flex: 1; min-width: 0; }
+    .lb-phase-mini-left {
+      flex-shrink: 0;
+      font-size: .58rem; color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
     .now-badge {
       font-size: .55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
       padding: 2px 7px; border-radius: 20px;
@@ -192,19 +219,8 @@
       display: flex; align-items: center; gap: 8px;
       flex-wrap: nowrap; margin-bottom: 14px;
     }
-    .filter-tabs { display: flex; gap: 4px; flex-shrink: 0; }
-    .ftab {
-      padding: 5px 14px; border-radius: 20px; font-size: .72rem; font-weight: 600;
-      cursor: pointer; border: 1px solid var(--border);
-      background: transparent; color: var(--muted2);
-      transition: all .15s; white-space: nowrap;
-    }
-    .ftab.active {
-      background: rgba(2,132,199,.1); color: var(--accent);
-      border-color: rgba(2,132,199,.3);
-    }
     .search-box {
-      flex: 1; min-width: 120px; max-width: 260px;
+      flex: 0 1 220px; min-width: 140px; max-width: 260px;
       background: var(--surface2); border: 1px solid var(--border);
       border-radius: 8px; padding: 5px 11px; color: var(--text);
       font-size: .76rem; outline: none;
@@ -213,7 +229,7 @@
     .search-box:focus { border-color: var(--accent); }
     .search-box::placeholder { color: var(--muted); }
 
-    .lb-count { margin-left: auto; font-size: .72rem; color: var(--muted2); white-space: nowrap; }
+    .lb-count { flex-shrink: 0; font-size: .72rem; color: var(--muted2); white-space: nowrap; }
 
     .lb-table-wrap { overflow-x: auto; }
     table {
@@ -293,18 +309,6 @@
     }
     .eval-vm-vl { color: var(--muted2); }
     .eval-vm-sc { color: var(--green); font-weight: 600; }
-
-    /* per-miner aggregated loss cell */
-    .vl-agg {
-      display: flex; flex-direction: column; gap: 1px;
-    }
-    .vl-current { font-variant-numeric: tabular-nums; font-weight: 600; }
-    .vl-minmax {
-      display: flex; gap: 5px;
-      font-size: .6rem; color: var(--muted2);
-      font-variant-numeric: tabular-nums;
-    }
-    .vl-mini-lbl { color: var(--muted); }
 
     .show-more-row td {
       text-align: center; padding: 12px;
@@ -418,17 +422,13 @@
 <main>
   <div id="err" class="error-bar"></div>
 
-  <!-- Current Phase -->
-  <p class="section-label">Current Phase</p>
-  <div class="card" id="phase-card"><div class="loading">Loading…</div></div>
-
   <!-- Leaderboard (search input stays in DOM — never replaced on keystroke) -->
   <p class="section-label">Miner Leaderboard</p>
   <div class="card" id="lb-card">
     <div class="lb-toolbar">
-      <div class="filter-tabs" id="lb-filter-tabs"></div>
       <input type="search" class="search-box" id="lb-search-input"
         placeholder="Search UID · hotkey · repo…" autocomplete="off" spellcheck="false" />
+      <div id="lb-phase-mini" class="lb-phase-mini" style="display:none"></div>
       <span class="lb-count" id="lb-count">—</span>
     </div>
     <div class="lb-table-wrap" id="lb-table-wrap">
@@ -440,10 +440,6 @@
 
 <script>
 // ── constants ────────────────────────────────────────────────────────────────
-const PHASE_ORDER = [
-  "Distribute","Train","MinerCommit1","MinerCommit2",
-  "Submission","Validate","Merge","ValidatorCommit1","ValidatorCommit2"
-];
 const PHASE_COLOR = {
   Distribute:"var(--c-Distribute)", Train:"var(--c-Train)",
   MinerCommit1:"var(--c-MinerCommit1)", MinerCommit2:"var(--c-MinerCommit2)",
@@ -454,14 +450,15 @@ const PHASE_COLOR = {
 function pc(name) { return PHASE_COLOR[name] || "var(--accent)"; }
 function fmt(n) { return n == null ? "—" : Number(n).toLocaleString(); }
 const METRIC_DP = 7;
+const WEIGHT_DP = 5;
 function fmtF(n, d=4) { return n == null ? "—" : Number(n).toFixed(d); }
 function fmtMetric(n) { return n == null ? "—" : Number(n).toFixed(METRIC_DP); }
 function fmtMetricRaw(n) { return n == null ? "" : Number(n).toFixed(METRIC_DP); }
+function fmtWeight(n) { return n == null ? "—" : (Number(n) * 100).toFixed(WEIGHT_DP) + "%"; }
 function trunc(s, n=12) { if (!s) return "—"; return s.length > n ? s.slice(0,6)+"…"+s.slice(-4) : s; }
 
 // ── leaderboard state ────────────────────────────────────────────────────────
 let lbData = [];
-let lbFilter = "all";
 let lbSort = { col: "score", dir: "desc" };
 let lbSearch = "";
 let lbShowCount = 50;
@@ -672,7 +669,7 @@ function openMinerModal(uid) {
     ["Avg",     agg ? fmtMetric(agg.avg) : "—", "var(--yellow)"],
     ["Max",     agg ? fmtMetric(agg.max) : "—", "var(--red)"],
     ["Samples", agg ? agg.count : "—",    "var(--accent)"],
-    ["Weight",  r.weight_submitted != null ? fmtF(r.weight_submitted, 4) : "—", "var(--muted2)"],
+    ["Weight",  r.weight_submitted != null ? fmtWeight(r.weight_submitted) : "—", "var(--muted2)"],
     ["Evals",   r.evaluation_count ?? "—", "var(--muted2)"],
   ].map(([lbl, val, color]) => `
     <div class="mm-stat">
@@ -728,78 +725,20 @@ function closeMinerModal() {
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMinerModal(); });
 
 // ── shared phase helpers ───────────────────────────────────────────────────────
-function progBar(pct, color) {
-  return `
-    <div class="prog-wrap">
-      <div class="prog-header">
-        <span style="color:${color};font-weight:700">Phase progress</span>
-        <span>${pct}%</span>
-      </div>
-      <div class="prog-bg"><div class="prog-fill" style="width:${pct}%;background:${color}"></div></div>
-    </div>`;
-}
-
-/** All phases with start–end block numbers (from cycle API `blocks_until_next_phase`). */
-function buildPhaseBlocksListHTML(currentName, blocksUntil) {
-  if (!blocksUntil) return "";
-  const steps = [];
-  for (let i = 0; i < PHASE_ORDER.length; i++) {
-    const name = PHASE_ORDER[i];
-    const d = blocksUntil[name];
-    if (!d) continue;
-    const [start, end] = d;
-    const isCur = name === currentName;
-    const color = pc(name);
-    const arrow = steps.length ? '<span class="phase-flow-arrow" aria-hidden="true">--></span>' : "";
-    steps.push(`${arrow}<div class="phase-flow-step${isCur ? " is-current" : ""}">
-        <div class="phase-flow-head">
-          <span class="upcoming-dot" style="background:${color}"></span>
-          <span style="color:${color}">${name}</span>
-          ${isCur ? '<span class="now-badge">NOW</span>' : ""}
-        </div>
-        <div class="phase-flow-blocks">${fmt(start)} – ${fmt(end)}</div>
-      </div>`);
-  }
-  return `
-    <div class="phase-subsection">
-      <div class="phase-subsection-title">All phases</div>
-      <div class="phase-flow">${steps.join("")}</div>
-    </div>`;
-}
-
-// Dashboard phase snapshot (cached so mismatch banner survives cycle-only ticks)
-let lastLbPhase = null;
-
-// ── Current Phase card (cycle API) ─────────────────────────────────────────────
-function renderPhaseCard(cp, lp, blocksUntil) {
-  if (lp) lastLbPhase = lp;
-  const dash = lastLbPhase;
-
+function renderLbPhaseMini(cp) {
+  const el = document.getElementById("lb-phase-mini");
+  if (!el || !cp) { if (el) el.style.display = "none"; return; }
   const color = pc(cp.phase_name);
   const total = (cp.phase_end_block - cp.phase_start_block) || 1;
   const pct   = Math.round((cp.blocks_into_phase / total) * 100);
-
-  const mismatch = dash && (
-    dash.name !== cp.phase_name ||
-    Number(dash.head_block) !== Number(cp.block)
-  );
-
-  document.getElementById("phase-card").innerHTML = `
-    <div class="src-label">
-      <span class="src-dot" style="background:var(--accent)"></span>
-      Cycle API
-    </div>
-    <div class="phase-name">
-      <span class="pdot" style="color:${color};background:${color}"></span>
-      ${cp.phase_name}
-    </div>
-    ${progBar(pct, color)}
-    <div class="prog-footer" style="margin-top:-8px;margin-bottom:12px">
-      <span>${fmt(cp.blocks_into_phase)} blocks in</span>
-      <span>${fmt(cp.blocks_remaining_in_phase)} remaining</span>
-    </div>
-    ${buildPhaseBlocksListHTML(cp.phase_name, blocksUntil)}
-  `;
+  el.style.display = "flex";
+  el.innerHTML = `
+    <span class="pdot" style="color:${color};background:${color}"></span>
+    <span class="lb-phase-mini-name" style="color:${color}">${cp.phase_name}</span>
+    <div class="lb-phase-mini-prog">
+      <div class="prog-bg"><div class="prog-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span class="lb-phase-mini-left">${fmt(cp.blocks_remaining_in_phase)} left</span>
+    </div>`;
 }
 
 // ── render leaderboard ────────────────────────────────────────────────────────
@@ -817,10 +756,6 @@ function lossClass(v) {
 
 function getFilteredSorted() {
   let rows = [...lbData];
-
-  // filter
-  if (lbFilter === "scored")   rows = rows.filter(r => r.val_loss != null && r.val_loss > 0);
-  if (lbFilter === "assigned") rows = rows.filter(r => r.in_assignment);
 
   // search
   if (lbSearch) {
@@ -843,7 +778,7 @@ function getFilteredSorted() {
   return rows;
 }
 
-/** @param {boolean} tableOnly if true, skip re-rendering filter tabs (search typing). */
+/** @param {boolean} tableOnly if true, only refresh the table (search typing). */
 function renderLeaderboard(tableOnly) {
   const filtered = getFilteredSorted();
   const visible  = filtered.slice(0, lbShowCount);
@@ -893,24 +828,9 @@ function renderLeaderboard(tableOnly) {
       </div>`;
     }).join("");
 
-    // val_loss cell: current value + aggregated min/avg/max from history
-    const agg = vlAgg(r.uid);
-    let vlCell;
-    if (r.val_loss == null) {
-      vlCell = `<span class="loss-val loss-none">—</span>`;
-    } else if (agg && agg.count > 1) {
-      vlCell = `
-        <div class="vl-agg">
-          <span class="vl-current loss-val ${lossClass(r.val_loss)}">${fmtMetric(r.val_loss)}</span>
-          <div class="vl-minmax">
-            <span><span class="vl-mini-lbl">mn</span> ${fmtMetric(agg.min)}</span>
-            <span><span class="vl-mini-lbl">avg</span> ${fmtMetric(agg.avg)}</span>
-            <span><span class="vl-mini-lbl">mx</span> ${fmtMetric(agg.max)}</span>
-          </div>
-        </div>`;
-    } else {
-      vlCell = `<span class="loss-val ${lossClass(r.val_loss)}">${fmtMetric(r.val_loss)}</span>`;
-    }
+    const vlCell = r.val_loss == null
+      ? `<span class="loss-val loss-none">—</span>`
+      : `<span class="loss-val ${lossClass(r.val_loss)}">${fmtMetric(r.val_loss)}</span>`;
 
     return `<tr style="cursor:pointer" onclick="openMinerModal(${r.uid})">
       <td><span class="rank ${rankCls}">${rank}</span></td>
@@ -922,7 +842,7 @@ function renderLeaderboard(tableOnly) {
         </div>
       </td>
       <td>${vlCell}</td>
-      <td><span class="weight-val">${r.weight_submitted != null ? fmtF(r.weight_submitted,4) : "—"}</span></td>
+      <td><span class="weight-val">${r.weight_submitted != null ? fmtWeight(r.weight_submitted) : "—"}</span></td>
       <td><div class="eval-chips">${evalLabels || '<span style="color:var(--muted)">—</span>'}</div></td>
       <td>${r.in_assignment ? '<span class="badge-assigned">Active</span>' : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${repoLink}</td>
@@ -941,10 +861,6 @@ function renderLeaderboard(tableOnly) {
       </table>`;
 
   if (!tableOnly) {
-    document.getElementById("lb-filter-tabs").innerHTML = `
-        <button class="ftab ${lbFilter==="all"?"active":""}"      onclick="setFilter('all')">All <span style="opacity:.6">${lbData.length}</span></button>
-        <button class="ftab ${lbFilter==="scored"?"active":""}"   onclick="setFilter('scored')">Scored</button>
-        <button class="ftab ${lbFilter==="assigned"?"active":""}" onclick="setFilter('assigned')">Assigned</button>`;
     const inp = document.getElementById("lb-search-input");
     if (inp && inp.value !== lbSearch) inp.value = lbSearch;
   }
@@ -953,7 +869,6 @@ function renderLeaderboard(tableOnly) {
   document.getElementById("lb-table-wrap").innerHTML = tableHTML;
 }
 
-function setFilter(f) { lbFilter = f; lbShowCount = 50; renderLeaderboard(false); }
 function setSort(col) {
   if (lbSort.col === col) lbSort.dir = lbSort.dir === "asc" ? "desc" : "asc";
   else { lbSort = { col, dir: col === "val_loss" ? "asc" : "desc" }; }
@@ -972,10 +887,7 @@ async function refresh() {
 
     document.getElementById("err").style.display = "none";
 
-    // Current Phase
-    if (all.get_phase) {
-      renderPhaseCard(all.get_phase, lb.data.phase, all.blocks_until_next_phase);
-    }
+    if (all.get_phase) renderLbPhaseMini(all.get_phase);
 
     // Leaderboard (history persisted server-side in data/miner_history.json)
     lbData = lb.data.leaderboard || [];
@@ -993,39 +905,7 @@ async function refresh() {
     document.getElementById("spin").style.display = "none";
   }
 }
-// Normalize cycle API phase (different field names) → leaderboard API shape
-function normalizeCyclePhase(cp, prevUpcoming) {
-  return {
-    name:             cp.phase_name,
-    index:            cp.phase_index,
-    started_at_block: cp.phase_start_block,
-    ends_at_block:    cp.phase_end_block,
-    blocks_remaining: cp.blocks_remaining_in_phase,
-    head_block:       cp.block,
-    cycle_index:      cp.cycle_index,
-    cycle_length:     cp.cycle_length,
-    upcoming:         prevUpcoming || [],
-  };
-}
-
-// cycle data refreshes every 6s, leaderboard every 18s
-let lbAge = 0;
-async function tick() {
-  lbAge++;
-  if (lbAge >= 3) { lbAge = 0; await refresh(); }
-  else {
-    document.getElementById("spin").style.display = "inline-block";
-    try {
-      const all = await fetch("/api/all").then(r => r.json());
-      if (all.get_phase) {
-        renderPhaseCard(all.get_phase, null, all.blocks_until_next_phase);
-      }
-      document.getElementById("ts").textContent =
-        new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
-    } catch {}
-    document.getElementById("spin").style.display = "none";
-  }
-}
+const REFRESH_MS = 12000;
 
 document.getElementById("lb-search-input").addEventListener("input", function () {
   lbSearch = this.value;
@@ -1034,7 +914,7 @@ document.getElementById("lb-search-input").addEventListener("input", function ()
 });
 
 refresh();
-setInterval(tick, 6000);
+setInterval(refresh, REFRESH_MS);
 </script>
 <!-- Miner detail modal -->
 <div id="miner-modal" class="miner-modal" onclick="if(event.target===this)closeMinerModal()" style="display:none">

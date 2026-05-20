@@ -54,9 +54,22 @@ _scraper:   cloudscraper.CloudScraper | None = None
 _lb_client: httpx.AsyncClient | None         = None
 _cache: dict[str, tuple[float, Any]]         = {}
 _history_lock = asyncio.Lock()
+_last_lb_rows: list[Any]                      = []
+
+# uid → repo_id → revision → [samples]
+HistoryStore = dict[str, dict[str, dict[str, Any]]]
+LEGACY_REPO_KEY = "__legacy__"
 
 
-def _read_miner_history_unlocked() -> dict[str, dict[str, dict[str, Any]]]:
+def _repo_key(repo_id: str | None) -> str:
+    return repo_id or "__none__"
+
+
+def _rev_key(revision: str | None) -> str:
+    return revision or "__none__"
+
+
+def _read_miner_history_unlocked() -> HistoryStore:
     if not HISTORY_PATH.exists():
         return {}
     try:
@@ -68,16 +81,12 @@ def _read_miner_history_unlocked() -> dict[str, dict[str, dict[str, Any]]]:
         return {}
 
 
-def _write_miner_history_unlocked(history: dict[str, dict[str, dict[str, Any]]]) -> None:
+def _write_miner_history_unlocked(history: HistoryStore) -> None:
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     tmp = HISTORY_PATH.with_suffix(".json.tmp")
     with tmp.open("w", encoding="utf-8") as f:
         json.dump(history, f, separators=(",", ":"))
     tmp.replace(HISTORY_PATH)
-
-
-def _history_snapshot(history: dict[str, dict[str, dict[str, Any]]]) -> dict[str, dict[str, dict[str, Any]]]:
-    return {uid: dict(revs) for uid, revs in history.items()}
 
 
 def _rev_samples(raw: Any) -> list[dict[str, Any]]:
@@ -93,25 +102,74 @@ def _rev_latest_t(raw: Any) -> int:
     return samples[-1].get("t", 0) if samples else 0
 
 
+def _is_legacy_miner_entry(uid_data: Any) -> bool:
+    if not isinstance(uid_data, dict):
+        return False
+    for value in uid_data.values():
+        if _rev_samples(value):
+            return True
+    return False
+
+
+def _migrate_history_in_place(history: HistoryStore) -> None:
+    for uid_key, uid_data in list(history.items()):
+        if isinstance(uid_data, dict) and _is_legacy_miner_entry(uid_data):
+            history[uid_key] = {LEGACY_REPO_KEY: uid_data}
+
+
 def _trim_revision_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if len(samples) <= MAX_SAMPLES_PER_REVISION:
         return samples
     return samples[-MAX_SAMPLES_PER_REVISION:]
 
 
-def _trim_miner_revisions(history: dict[str, dict[str, Any]], uid_key: str) -> None:
-    revs = history.get(uid_key)
-    if not revs or len(revs) <= MAX_REVISIONS_PER_MINER:
+def _trim_repo_revisions(repos: dict[str, Any], repo_key: str) -> None:
+    revs = repos.get(repo_key)
+    if not isinstance(revs, dict) or len(revs) <= MAX_REVISIONS_PER_MINER:
         return
     ordered = sorted(revs.items(), key=lambda item: _rev_latest_t(item[1]))
     for rev_key, _ in ordered[: len(ordered) - MAX_REVISIONS_PER_MINER]:
         del revs[rev_key]
 
 
-def _merge_leaderboard_into_history(
-    history: dict[str, dict[str, Any]],
-    entries: list[Any],
-) -> None:
+def _current_repos_from_entries(entries: list[Any]) -> dict[str, str]:
+    repos: dict[str, str] = {}
+    for row in entries:
+        if not isinstance(row, dict):
+            continue
+        uid = row.get("uid")
+        if uid is None:
+            continue
+        repos[str(uid)] = _repo_key(row.get("hf_repo_id"))
+    return repos
+
+
+def _history_for_display(
+    history: HistoryStore,
+    entries: list[Any] | None,
+) -> dict[str, dict[str, Any]]:
+    """Flatten to uid → revision for each miner's current repo only."""
+    current = _current_repos_from_entries(entries or [])
+    out: dict[str, dict[str, Any]] = {}
+    for uid_key, repos in history.items():
+        if not isinstance(repos, dict):
+            continue
+        repo_key = current.get(uid_key)
+        if not repo_key:
+            continue
+        revs = repos.get(repo_key)
+        if not isinstance(revs, dict):
+            continue
+        out[uid_key] = {
+            rev_key: _rev_samples(raw)
+            for rev_key, raw in revs.items()
+            if _rev_samples(raw)
+        }
+    return out
+
+
+def _merge_leaderboard_into_history(history: HistoryStore, entries: list[Any]) -> None:
+    _migrate_history_in_place(history)
     now_ms = int(time.time() * 1000)
     for row in entries:
         if not isinstance(row, dict):
@@ -121,17 +179,28 @@ def _merge_leaderboard_into_history(
         if uid is None or val is None:
             continue
         uid_key = str(uid)
+        repo_key = _repo_key(row.get("hf_repo_id"))
         rev = row.get("hf_revision") or None
-        rev_key = rev or "__none__"
+        rev_key = _rev_key(rev)
         score = _round_metric(row.get("score"))
-        revs = history.setdefault(uid_key, {})
+        repos = history.setdefault(uid_key, {})
+        if not isinstance(repos, dict):
+            repos = {}
+            history[uid_key] = repos
+        if _is_legacy_miner_entry(repos):
+            history[uid_key] = {LEGACY_REPO_KEY: repos}
+            repos = history[uid_key]
+        revs = repos.setdefault(repo_key, {})
+        if not isinstance(revs, dict):
+            revs = {}
+            repos[repo_key] = revs
         samples = _rev_samples(revs.get(rev_key))
         last = samples[-1] if samples else None
         if last is not None and last.get("v") == val and last.get("s") == score:
             continue
         samples.append({"v": val, "s": score, "t": now_ms, "rev": rev})
         revs[rev_key] = _trim_revision_samples(samples)
-        _trim_miner_revisions(history, uid_key)
+        _trim_repo_revisions(repos, repo_key)
 
 
 def _with_history_file(fn):
@@ -141,30 +210,37 @@ def _with_history_file(fn):
         return fn()
 
 
-def _read_miner_history_sync() -> dict[str, dict[str, dict[str, Any]]]:
-    def work():
-        return _history_snapshot(_read_miner_history_unlocked())
-
-    return _with_history_file(work)
-
-
-def _update_miner_history_sync(entries: list[Any] | None) -> dict[str, dict[str, dict[str, Any]]]:
+def _read_miner_history_sync() -> dict[str, dict[str, Any]]:
     def work():
         history = _read_miner_history_unlocked()
-        if entries:
-            _merge_leaderboard_into_history(history, entries)
-            _write_miner_history_unlocked(history)
-        return _history_snapshot(history)
+        _migrate_history_in_place(history)
+        return _history_for_display(history, _last_lb_rows)
 
     return _with_history_file(work)
 
 
-async def _read_miner_history() -> dict[str, dict[str, dict[str, Any]]]:
+def _update_miner_history_sync(entries: list[Any] | None) -> dict[str, dict[str, Any]]:
+    global _last_lb_rows
+
+    def work():
+        global _last_lb_rows
+        history = _read_miner_history_unlocked()
+        rows = entries or []
+        if rows:
+            _last_lb_rows = list(rows)
+            _merge_leaderboard_into_history(history, rows)
+            _write_miner_history_unlocked(history)
+        return _history_for_display(history, _last_lb_rows)
+
+    return _with_history_file(work)
+
+
+async def _read_miner_history() -> dict[str, dict[str, Any]]:
     async with _history_lock:
         return await asyncio.to_thread(_read_miner_history_sync)
 
 
-async def _update_miner_history(entries: list[Any] | None) -> dict[str, dict[str, dict[str, Any]]]:
+async def _update_miner_history(entries: list[Any] | None) -> dict[str, dict[str, Any]]:
     async with _history_lock:
         return await asyncio.to_thread(_update_miner_history_sync, entries)
 
